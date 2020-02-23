@@ -65,7 +65,7 @@ function WebTorrent (opts) {
   } else if (Buffer.isBuffer(opts.peerId)) {
     self.peerId = opts.peerId.toString('hex')
   } else {
-    self.peerId = Buffer.from(VERSION_PREFIX + randombytes(6).toString('hex')).toString('hex')
+    self.peerId = Buffer.from(VERSION_PREFIX + randombytes(9).toString('base64')).toString('hex')
   }
   self.peerIdBuffer = Buffer.from(self.peerId, 'hex')
 
@@ -78,6 +78,8 @@ function WebTorrent (opts) {
   }
   self.nodeIdBuffer = Buffer.from(self.nodeId, 'hex')
 
+  self._debugId = self.peerId.toString('hex').substring(0, 7)
+
   self.destroyed = false
   self.listening = false
   self.torrentPort = opts.torrentPort || 0
@@ -86,7 +88,7 @@ function WebTorrent (opts) {
   self.torrents = []
   self.maxConns = Number(opts.maxConns) || 55
 
-  debug(
+  self._debug(
     'new webtorrent (peerId %s, nodeId %s, port %s)',
     self.peerId, self.nodeId, self.torrentPort
   )
@@ -101,9 +103,11 @@ function WebTorrent (opts) {
     if (opts.wrtc) {
       // TODO: remove in v1
       console.warn('WebTorrent: opts.wrtc is deprecated. Use opts.tracker.wrtc instead')
-      self.tracker.wrtc = opts.wrtc // to support `webtorrent-hybrid` package
+      self.tracker.wrtc = opts.wrtc
     }
-    if (global.WRTC && !self.tracker.wrtc) self.tracker.wrtc = global.WRTC
+    if (global.WRTC && !self.tracker.wrtc) {
+      self.tracker.wrtc = global.WRTC
+    }
   }
 
   // Proxy
@@ -192,6 +196,8 @@ function WebTorrent (opts) {
     }
 
     debug('new webtorrent (peerId %s, nodeId %s)', self.peerId, self.nodeId)
+    // Enable or disable BEP19 (Web Seeds). Enabled by default:
+    self.enableWebSeeds = opts.webSeeds !== false
 
     if (typeof loadIPSet === 'function' && opts.blocklist != null) {
       loadIPSet(opts.blocklist, {
@@ -206,7 +212,6 @@ function WebTorrent (opts) {
     } else {
       process.nextTick(ready)
     }
-  }
 
   function ready () {
     if (self.destroyed) return
@@ -216,6 +221,7 @@ function WebTorrent (opts) {
 }
 
 WebTorrent.WEBRTC_SUPPORT = Peer.WEBRTC_SUPPORT
+WebTorrent.VERSION = VERSION
 
 Object.defineProperty(WebTorrent.prototype, 'downloadSpeed', {
   get: function () { return this._downloadSpeed() }
@@ -302,7 +308,7 @@ WebTorrent.prototype.add = function (torrentId, opts, ontorrent) {
   if (self.destroyed) throw new Error('client is destroyed')
   if (typeof opts === 'function') return self.add(torrentId, null, opts)
 
-  debug('add')
+  self._debug('add')
   opts = opts ? extend(opts) : {}
 
   var torrent = new Torrent(torrentId, self, opts)
@@ -349,13 +355,12 @@ WebTorrent.prototype.seed = function (input, opts, onseed) {
   if (self.destroyed) throw new Error('client is destroyed')
   if (typeof opts === 'function') return self.seed(input, null, opts)
 
-  debug('seed')
+  self._debug('seed')
   opts = opts ? extend(opts) : {}
 
   // When seeding from fs path, initialize store from that path to avoid a copy
   if (typeof input === 'string') opts.path = path.dirname(input)
   if (!opts.createdBy) opts.createdBy = 'WebTorrent/' + VERSION_STR
-  if (!self.tracker) opts.announce = []
 
   var torrent = self.add(null, opts, onTorrent)
   var streams
@@ -413,7 +418,7 @@ WebTorrent.prototype.seed = function (input, opts, onseed) {
   }
 
   function _onseed (torrent) {
-    debug('on seed')
+    self._debug('on seed')
     if (typeof onseed === 'function') onseed(torrent)
     torrent.emit('seed')
     self.emit('seed', torrent)
@@ -428,7 +433,7 @@ WebTorrent.prototype.seed = function (input, opts, onseed) {
  * @param  {function} cb
  */
 WebTorrent.prototype.remove = function (torrentId, cb) {
-  debug('remove')
+  this._debug('remove')
   var torrent = this.get(torrentId)
   if (!torrent) throw new Error('No torrent with id ' + torrentId)
   this._remove(torrentId, cb)
@@ -459,7 +464,7 @@ WebTorrent.prototype.destroy = function (cb) {
 
 WebTorrent.prototype._destroy = function (err, cb) {
   var self = this
-  debug('client destroy')
+  self._debug('client destroy')
   self.destroyed = true
 
   var tasks = self.torrents.map(function (torrent) {
@@ -490,16 +495,22 @@ WebTorrent.prototype._destroy = function (err, cb) {
 }
 
 WebTorrent.prototype._onListening = function () {
+  this._debug('listening')
   this.listening = true
 
   if (this._tcpPool) {
     // Sometimes server.address() returns `null` in Docker.
-    // WebTorrent issue: https://github.com/feross/bittorrent-swarm/pull/18
     var address = this._tcpPool.server.address()
     if (address) this.torrentPort = address.port
   }
 
   this.emit('listening')
+}
+
+WebTorrent.prototype._debug = function () {
+  var args = [].slice.call(arguments)
+  args[0] = '[' + this._debugId + '] ' + args[0]
+  debug.apply(null, args)
 }
 
 /**

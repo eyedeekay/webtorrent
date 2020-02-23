@@ -41,11 +41,13 @@ var WebTorrent = require('webtorrent')
 var client = new WebTorrent()
 
 // Sintel, a free, Creative Commons movie
-var torrentId = 'magnet:?xt=urn:btih:6a9759bffd5c0af65319979fb7832189f4f3c35d&dn=sintel.mp4&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.webtorrent.io&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fsintel-1024-surround.mp4'
+var torrentId = 'magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fsintel.torrent'
 
 client.add(torrentId, function (torrent) {
-  // Torrents can contain many files. Let's use the first.
-  var file = torrent.files[0]
+  // Torrents can contain many files. Let's use the .mp4 file
+  var file = torrent.files.find(function (file) {
+    return file.name.endsWith('.mp4')
+  })
 
   // Display the file by adding it to the DOM.
   // Supports video, audio, image files, and more!
@@ -91,7 +93,7 @@ var WebTorrent = require('webtorrent')
 
 var client = new WebTorrent()
 
-var magnetURI = 'magnet:...'
+var magnetURI = 'magnet: ...'
 
 client.add(magnetURI, { path: '/path/to/folder' }, function (torrent) {
   torrent.on('done', function () {
@@ -119,7 +121,7 @@ downloaded.
 
     <form>
       <label for="torrentId">Download from a magnet link: </label>
-      <input name="torrentId", placeholder="magnet:" value="magnet:?xt=urn:btih:6a9759bffd5c0af65319979fb7832189f4f3c35d&dn=sintel.mp4&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&tr=wss%3A%2F%2Ftracker.webtorrent.io&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fsintel-1024-surround.mp4">
+      <input name="torrentId", placeholder="magnet:" value="magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d566095a10&dn=Sintel&tr=udp%3A%2F%2Fexplodie.org%3A6969&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.empire-js.us%3A1337&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337&tr=wss%3A%2F%2Ftracker.btorrent.xyz&tr=wss%3A%2F%2Ftracker.fastcast.nz&tr=wss%3A%2F%2Ftracker.openwebtorrent.com&ws=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2F&xs=https%3A%2F%2Fwebtorrent.io%2Ftorrents%2Fsintel.torrent">
       <button type="submit">Download</button>
     </form>
 
@@ -200,85 +202,56 @@ keep in mind that the browser can only download torrents that are seeded by
 WebRTC peers (web peers). Use [WebTorrent Desktop](https://webtorrent.io/desktop)
 or [Instant.io](https://instant.io) to seed torrents to the WebTorrent network.
 
-Javascript:
-
-```js
-var torrentId = 'https://webtorrent.io/torrents/sintel.torrent'
-
-var client = new WebTorrent()
-
-// HTML elements
-var $body = document.body
-var $progressBar = document.querySelector('#progressBar')
-var $numPeers = document.querySelector('#numPeers')
-var $downloaded = document.querySelector('#downloaded')
-var $total = document.querySelector('#total')
-var $remaining = document.querySelector('#remaining')
-var $uploadSpeed = document.querySelector('#uploadSpeed')
-var $downloadSpeed = document.querySelector('#downloadSpeed')
-
-// Download the torrent
-client.add(torrentId, function (torrent) {
-
-  // Stream the file in the browser
-  torrent.files[0].appendTo('#output')
-
-  // Trigger statistics refresh
-  torrent.on('done', onDone)
-  setInterval(onProgress, 500)
-  onProgress()
-
-  // Statistics
-  function onProgress () {
-    // Peers
-    $numPeers.innerHTML = torrent.numPeers + (torrent.numPeers === 1 ? ' peer' : ' peers')
-
-    // Progress
-    var percent = Math.round(torrent.progress * 100 * 100) / 100
-    $progressBar.style.width = percent + '%'
-    $downloaded.innerHTML = prettyBytes(torrent.downloaded)
-    $total.innerHTML = prettyBytes(torrent.length)
-
-    // Remaining time
-    var remaining
-    if (torrent.done) {
-      remaining = 'Done.'
-    } else {
-      remaining = moment.duration(torrent.timeRemaining / 1000, 'seconds').humanize()
-      remaining = remaining[0].toUpperCase() + remaining.substring(1) + ' remaining.'
-    }
-    $remaining.innerHTML = remaining
-
-    // Speed rates
-    $downloadSpeed.innerHTML = prettyBytes(torrent.downloadSpeed) + '/s'
-    $uploadSpeed.innerHTML = prettyBytes(torrent.uploadSpeed) + '/s'
-  }
-  function onDone () {
-    $body.className += ' is-seed'
-    onProgress()
-  }
-})
-
-// Human readable bytes util
-function prettyBytes(num) {
-  var exponent, unit, neg = num < 0, units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-  if (neg) num = -num
-  if (num < 1) return (neg ? '-' : '') + num + ' B'
-  exponent = Math.min(Math.floor(Math.log(num) / Math.log(1000)), units.length - 1)
-  num = Number((num / Math.pow(1000, exponent)).toFixed(2))
-  unit = units[exponent]
-  return (neg ? '-' : '') + num + ' ' + unit
-}
-```
-
-HTML:
-
 ```html
 <!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8">
     <title>WebTorrent video player</title>
+    <style>
+      #output video {
+        width: 100%;
+      }
+      #progressBar {
+          height: 5px;
+          width: 0%;
+          background-color: #35b44f;
+          transition: width .4s ease-in-out;
+      }
+      body.is-seed .show-seed {
+          display: inline;
+      }
+      body.is-seed .show-leech {
+          display: none;
+      }
+      .show-seed {
+          display: none;
+      }
+      #status code {
+          font-size: 90%;
+          font-weight: 700;
+          margin-left: 3px;
+          margin-right: 3px;
+          border-bottom: 1px dashed rgba(255,255,255,0.3);
+      }
+
+      .is-seed #hero {
+          background-color: #154820;
+          transition: .5s .5s background-color ease-in-out;
+      }
+      #hero {
+          background-color: #2a3749;
+      }
+      #status {
+          color: #fff;
+          font-size: 17px;
+          padding: 5px;
+      }
+      a:link, a:visited {
+          color: #30a247;
+          text-decoration: none;
+      }
+    </style>
   </head>
   <body>
     <div id="hero">
@@ -310,57 +283,85 @@ HTML:
     </div>
     <!-- Include the latest version of WebTorrent -->
     <script src="https://cdn.jsdelivr.net/webtorrent/latest/webtorrent.min.js"></script>
-    <!-- Moment is used to show human readable remaining time -->
+
+    <!-- Moment is used to show a human-readable remaining time -->
     <script src="http://momentjs.com/downloads/moment.min.js"></script>
+
+    <script>
+      var torrentId = 'https://webtorrent.io/torrents/sintel.torrent'
+
+      var client = new WebTorrent()
+
+      // HTML elements
+      var $body = document.body
+      var $progressBar = document.querySelector('#progressBar')
+      var $numPeers = document.querySelector('#numPeers')
+      var $downloaded = document.querySelector('#downloaded')
+      var $total = document.querySelector('#total')
+      var $remaining = document.querySelector('#remaining')
+      var $uploadSpeed = document.querySelector('#uploadSpeed')
+      var $downloadSpeed = document.querySelector('#downloadSpeed')
+
+      // Download the torrent
+      client.add(torrentId, function (torrent) {
+
+        // Torrents can contain many files. Let's use the .mp4 file
+        var file = torrent.files.find(function (file) {
+          return file.name.endsWith('.mp4')
+        })
+
+        // Stream the file in the browser
+        file.appendTo('#output')
+
+        // Trigger statistics refresh
+        torrent.on('done', onDone)
+        setInterval(onProgress, 500)
+        onProgress()
+
+        // Statistics
+        function onProgress () {
+          // Peers
+          $numPeers.innerHTML = torrent.numPeers + (torrent.numPeers === 1 ? ' peer' : ' peers')
+
+          // Progress
+          var percent = Math.round(torrent.progress * 100 * 100) / 100
+          $progressBar.style.width = percent + '%'
+          $downloaded.innerHTML = prettyBytes(torrent.downloaded)
+          $total.innerHTML = prettyBytes(torrent.length)
+
+          // Remaining time
+          var remaining
+          if (torrent.done) {
+            remaining = 'Done.'
+          } else {
+            remaining = moment.duration(torrent.timeRemaining / 1000, 'seconds').humanize()
+            remaining = remaining[0].toUpperCase() + remaining.substring(1) + ' remaining.'
+          }
+          $remaining.innerHTML = remaining
+
+          // Speed rates
+          $downloadSpeed.innerHTML = prettyBytes(torrent.downloadSpeed) + '/s'
+          $uploadSpeed.innerHTML = prettyBytes(torrent.uploadSpeed) + '/s'
+        }
+        function onDone () {
+          $body.className += ' is-seed'
+          onProgress()
+        }
+      })
+
+      // Human readable bytes util
+      function prettyBytes(num) {
+        var exponent, unit, neg = num < 0, units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        if (neg) num = -num
+        if (num < 1) return (neg ? '-' : '') + num + ' B'
+        exponent = Math.min(Math.floor(Math.log(num) / Math.log(1000)), units.length - 1)
+        num = Number((num / Math.pow(1000, exponent)).toFixed(2))
+        unit = units[exponent]
+        return (neg ? '-' : '') + num + ' ' + unit
+      }
+    </script>
   </body>
 </html>
-```
-
-CSS:
-
-```css
-#output video {
-  width: 100%;
-}
-#progressBar {
-    height: 5px;
-    width: 0%;
-    background-color: #35b44f;
-    transition: width .4s ease-in-out;
-}
-body.is-seed .show-seed {
-    display: inline;
-}
-body.is-seed .show-leech {
-    display: none;
-}
-.show-seed {
-    display: none;
-}
-#status code {
-    font-size: 90%;
-    font-weight: 700;
-    margin-left: 3px;
-    margin-right: 3px;
-    border-bottom: 1px dashed rgba(255,255,255,0.3);
-}
-
-.is-seed #hero {
-    background-color: #154820;
-    transition: .5s .5s background-color ease-in-out;
-}
-#hero {
-    background-color: #2a3749;
-}
-#status {
-    color: #fff;
-    font-size: 17px;
-    padding: 5px;
-}
-a:link, a:visited {
-    color: #30a247;
-    text-decoration: none;
-}
 ```
 
 ## More Documentation
