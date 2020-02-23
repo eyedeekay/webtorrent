@@ -94,41 +94,110 @@ class WebTorrent extends EventEmitter {
       }
     }
 
-    if (typeof TCPPool === 'function') {
-      this._tcpPool = new TCPPool(this)
+    // Proxy
+    self.proxyOpts = opts.proxyOpts
+    if (self.proxyOpts) {
+      self.proxyOpts.proxyTrackerConnections = self.proxyOpts.proxyTrackerConnections !== false
+      self.proxyOpts.proxyPeerConnections = self.proxyOpts.proxyPeerConnections !== false
+
+      if (self.tracker && self.proxyOpts.proxyTrackerConnections && !self.tracker.proxyOpts) {
+        self.tracker.proxyOpts = self.proxyOpts
+      }
+
+      var socksProxy = self.proxyOpts.socksProxy
+      if (socksProxy) {
+        if (!socksProxy.proxy) socksProxy.proxy = {}
+        if (!socksProxy.proxy.type) socksProxy.proxy.type = 5
+
+        // Ensure electron-wrtc is used in electron with socks proxy
+        if (self.tracker && self.proxyOpts.proxyPeerConnections &&
+        process && process.versions.electron &&
+        self.tracker.wrtc && !self.tracker.wrtc.electronDaemon) {
+          console.warn('You need to provide an electron-wrtc instance in opts.wrtc to use Socks proxy in electron -> WebRTC is disabled')
+          self.tracker.wrtc = false
+        }
+
+        // Convert proxy opts to electron API in webtorrent-hybrid
+        if (self.tracker && self.tracker.wrtc && self.tracker.wrtc.electronDaemon &&
+          socksProxy && self.proxyOpts.proxyPeerConnections) {
+          if (!socksProxy.proxy.authentication && !socksProxy.proxy.userid && socksProxy.proxy.type === 5) {
+            var electronConfig = {
+              proxyRules: 'socks' + socksProxy.proxy.type + '://' + socksProxy.proxy.ipAddress + ':' + socksProxy.proxy.port
+            }
+            self.tracker.wrtc.electronDaemon.eval('window.webContents.session.setProxy(' +
+                JSON.stringify(electronConfig) + ', function(){})', { mainProcess: true }, networkSettingsReady)
+          } else {
+            console.warn('SOCKS Proxy must be version 5 with no authentication to work in electron-wrtc -> WebRTC is disabled')
+            self.tracker.wrtc = false
+            networkSettingsReady(null)
+          }
+        } else {
+          networkSettingsReady(null)
+        }
+      } else {
+        networkSettingsReady(null)
+      }
     } else {
-      process.nextTick(() => {
-        this._onListening()
-      })
+      networkSettingsReady(null)
     }
 
-    // stats
-    this._downloadSpeed = speedometer()
-    this._uploadSpeed = speedometer()
+    function networkSettingsReady (err) {
+      if (err) {
+        self._destroy(err)
+      }
 
-    if (opts.dht !== false && typeof DHT === 'function' /* browser exclude */) {
+      if (typeof TCPPool === 'function') {
+        this._tcpPool = new TCPPool(this)
+      } else {
+        process.nextTick(() => {
+          this._onListening()
+        })
+      }
+
+      // stats
+      this._downloadSpeed = speedometer()
+      this._uploadSpeed = speedometer()
+
+      if (opts.dht !== false && typeof DHT === 'function' /* browser exclude */) {
       // use a single DHT instance for all torrents, so the routing table can be reused
-      this.dht = new DHT(Object.assign({}, { nodeId: this.nodeId }, opts.dht))
+        this.dht = new DHT(Object.assign({}, { nodeId: this.nodeId }, opts.dht))
 
-      this.dht.once('error', err => {
-        this._destroy(err)
-      })
+        this.dht.once('error', err => {
+          this._destroy(err)
+        })
 
-      this.dht.once('listening', () => {
-        const address = this.dht.address()
-        if (address) this.dhtPort = address.port
-      })
+        this.dht.once('listening', () => {
+          const address = this.dht.address()
+          if (address) this.dhtPort = address.port
+        })
 
-      // Ignore warning when there are > 10 torrents in the client
-      this.dht.setMaxListeners(0)
+        // Ignore warning when there are > 10 torrents in the client
+        this.dht.setMaxListeners(0)
 
-      this.dht.listen(this.dhtPort)
-    } else {
-      this.dht = false
+        this.dht.listen(this.dhtPort)
+      } else {
+        this.dht = false
+      }
+
+      // Enable or disable BEP19 (Web Seeds). Enabled by default:
+      this.enableWebSeeds = opts.webSeeds !== false
+
+      debug('new webtorrent (peerId %s, nodeId %s)', self.peerId, self.nodeId)
+
+      if (typeof loadIPSet === 'function' && opts.blocklist != null) {
+        loadIPSet(opts.blocklist, {
+          headers: {
+            'user-agent': 'WebTorrent/' + VERSION + ' (https://webtorrent.io)'
+          }
+        }, function (err, ipSet) {
+          if (err) return self.error('Failed to load blocklist: ' + err.message)
+          self.blocked = ipSet
+          ready()
+        })
+      } else {
+        process.nextTick(ready)
+      }
     }
-
-    // Enable or disable BEP19 (Web Seeds). Enabled by default:
-    this.enableWebSeeds = opts.webSeeds !== false
 
     const ready = () => {
       if (this.destroyed) return
@@ -427,7 +496,7 @@ function isReadable (obj) {
 
 /**
  * Check if `obj` is a W3C `FileList` object
- * @param  {*} obj
+https://github.com/yciabaud/webtorrent * @param  {*} obj
  * @return {boolean}
  */
 function isFileList (obj) {

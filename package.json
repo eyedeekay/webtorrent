@@ -15,6 +15,7 @@
     "load-ip-set": false,
     "net": false,
     "os": false,
+    "socks": false,
     "ut_pex": false
   },
   "browserify": {
